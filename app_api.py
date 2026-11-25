@@ -287,3 +287,23 @@ def register_push_token(
         "ok": True,
         "platform": request.platform,
     }
+
+
+@router.get("/api/info")
+def get_info():
+    """Flutter 앱의 Cloud 연결 확인용 API."""
+
+    return {
+        "name": "doorradar",
+        "host": "rad2-cloud.onrender.com",
+        "version": "0.1.0",
+        "model": "situation_trees_real",
+        "model_version": "v5",
+        "region": {
+            "xmin": -2.0,
+            "xmax": 2.0,
+            "ymin": 0.0,
+            "ymax": 3.0,
+            "fov_deg": 135.0
+        }
+    }
