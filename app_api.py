@@ -9,7 +9,7 @@ import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse
@@ -212,3 +212,78 @@ def update_event_label(
     if row is None:
         raise ApiError(404, "not_found", f"이벤트 {event_id}가 없습니다.")
     return _event_view(row)
+
+
+class PushTokenRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
+    platform: Literal["android", "ios"] = "android"
+
+
+@router.put("/api/push_token")
+def register_push_token(
+    request: PushTokenRequest,
+    authorization: str | None = Header(default=None),
+    device_id: str = Depends(require_app_device),
+):
+    """Flutter 앱의 FCM Token 등록 또는 교체."""
+
+    # 1. 앱 인증 Token의 Hash 계산
+    app_token = authorization[7:].strip()
+    token_hash = hashlib.sha256(
+        app_token.encode("utf-8")
+    ).hexdigest()
+
+    with get_connection() as conn:
+
+        # 2. 인증된 앱의 DB ID 확인
+        row = conn.execute(
+            """
+            SELECT id
+            FROM app_tokens
+            WHERE token_hash = %s
+              AND device_id = %s
+              AND revoked_at IS NULL
+            """,
+            (token_hash, device_id),
+        ).fetchone()
+
+        if row is None:
+            raise ApiError(
+                401, "unauthorized",
+                "앱 인증 Token이 올바르지 않습니다."
+            )
+
+        app_token_id = row[0]
+
+        # 3. 같은 앱의 기존 Token을 교체
+        #    같은 FCM Token이 다른 등록에 있으면 이전 등록도 정리
+        conn.execute(
+            """
+            DELETE FROM push_tokens
+            WHERE app_token_id = %s
+               OR fcm_token = %s
+            """,
+            (app_token_id, request.token),
+        )
+
+        # 4. 새로운 FCM Token 저장
+        conn.execute(
+            """
+            INSERT INTO push_tokens (
+                app_token_id,
+                fcm_token,
+                platform
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                app_token_id,
+                request.token,
+                request.platform,
+            ),
+        )
+
+    return {
+        "ok": True,
+        "platform": request.platform,
+    }
