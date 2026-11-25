@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 from db.connection import check_connection
 from device_events import router as device_router
-
+from app_api import router as app_router
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -39,6 +39,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 app.include_router(device_router)
+app.include_router(app_router)
 
 @app.get("/health")
 def health():
