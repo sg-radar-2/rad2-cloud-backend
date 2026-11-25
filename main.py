@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from db.connection import check_connection
+from device_events import router as device_router
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -37,7 +38,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
-
+app.include_router(device_router)
 
 @app.get("/health")
 def health():
