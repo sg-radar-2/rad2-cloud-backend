@@ -156,3 +156,15 @@ CREATE TABLE IF NOT EXISTS push_deliveries (
 
     PRIMARY KEY (event_id, app_token_id)
 );
+
+-- Select this *entire* statement and press Ctrl+Enter in DBeaver.
+-- Idempotent: preserves existing rows when the table already exists.
+CREATE TABLE IF NOT EXISTS public.event_photos (
+    event_id BIGINT NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    variant TEXT NOT NULL CHECK (variant IN ('original', 'thumb')),
+    image_data BYTEA NOT NULL,
+    sha256 TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (event_id, variant)
+);

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from db.connection import check_connection
 from device_events import router as device_router
 from app_api import router as app_router, ApiError, api_error_handler
+from photo_api import router as photo_router
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -41,6 +42,7 @@ app = FastAPI(
 app.include_router(device_router)
 app.include_router(app_router)
 app.add_exception_handler(ApiError, api_error_handler)
+app.include_router(photo_router)
 
 @app.get("/health")
 def health():
