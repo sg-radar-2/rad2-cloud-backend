@@ -96,7 +96,7 @@ def require_app_device(authorization: str | None = Header(default=None)) -> str:
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT device_id FROM app_tokens WHERE token_hash = %s",
+            "SELECT device_id FROM app_tokens WHERE token_hash = %s AND revoked_at IS NULL",
             (token_hash,),
         ).fetchone()
     if row is None:
@@ -332,8 +332,10 @@ def get_status(
 
     last_event_at = row[0] if row else None
 
-    # 아직 Pi의 실제 하드웨어 상태를 수신하지 않음
-    return {
+    # Keep the original response schema for Flutter; LIVE overlays only fresh Pi data.
+    from live_api import hub
+    live_overlay = hub.status_overlay(device_id)
+    base = {
         "radar": "disconnected",
         "radar_host": None,
         "radar_error": "Pi status reporting is not connected yet",
@@ -362,6 +364,8 @@ def get_status(
         ),
         "status_source": "unavailable",
     }
+    base.update(live_overlay)
+    return base
 
 
 ABNORMAL_SETTINGS = frozenset((
