@@ -307,3 +307,54 @@ def get_info():
             "fov_deg": 135.0
         }
     }
+
+
+@router.get("/api/status")
+def get_status(
+    device_id: str = Depends(require_app_device),
+):
+    """Flutter 기기 상태 화면용 Cloud API."""
+
+    # 가장 최근에 Cloud가 Event를 받은 시각
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT MAX(created_at)
+            FROM events
+            WHERE device_id = %s
+            """,
+            (device_id,),
+        ).fetchone()
+
+    last_event_at = row[0] if row else None
+
+    # 아직 Pi의 실제 하드웨어 상태를 수신하지 않음
+    return {
+        "radar": "disconnected",
+        "radar_host": None,
+        "radar_error": "Pi status reporting is not connected yet",
+        "frame_rate": None,
+
+        "camera": None,
+        "camera_backend": None,
+
+        "latency_s": None,
+        "judge_error": None,
+
+        "cpu_temp_c": None,
+        "uptime_s": None,
+
+        "storage": {
+            "used_gb": None,
+            "total_gb": None,
+            "photos": None,
+        },
+
+        "pending_photos": 0,
+
+        "last_event_at": (
+            last_event_at.isoformat()
+            if last_event_at else None
+        ),
+        "status_source": "unavailable",
+    }
