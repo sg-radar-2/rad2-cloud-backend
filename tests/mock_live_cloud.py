@@ -35,8 +35,8 @@ def status_from_http(app_token):
 
 async def main():
     print("M-LIVE Cloud relay test (mock Pi, no actual Radar)")
-    device_key = getpass.getpass("Render RAD2_DEVICE_API_KEY: ").strip()
-    app_token = getpass.getpass("Paired Flutter App Token: ").strip()
+    device_key = input("Render RAD2_DEVICE_API_KEY: ").strip()
+    app_token = input("Paired Flutter App Token: ").strip()
     if not device_key or not app_token:
         raise SystemExit("Keys are required")
 
