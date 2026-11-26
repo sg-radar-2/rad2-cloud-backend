@@ -8,13 +8,17 @@ app_tokens(device_id, token_hash) and events(id, device_id, ...).
 import hashlib
 import os
 import secrets
+import math
+
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
+
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
+from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
 
@@ -358,3 +362,127 @@ def get_status(
         ),
         "status_source": "unavailable",
     }
+
+
+ABNORMAL_SETTINGS = frozenset((
+    "장시간 체류", "배회", "반복 접근"
+))
+
+
+def _settings_view(row):
+    return {
+        "notify": row[0],
+        "camera_on": row[1],
+        "camera_prob": row[2],
+        "camera_hold_s": row[3],
+        "region": get_info()["region"],
+        "device_keep_days": 30,
+    }
+
+
+def _ensure_settings_row(conn, device_id: str):
+    conn.execute(
+        "INSERT INTO settings (device_id) VALUES (%s) "
+        "ON CONFLICT (device_id) DO NOTHING",
+        (device_id,),
+    )
+
+
+def _load_settings_row(conn, device_id: str):
+    return conn.execute(
+        "SELECT notify, camera_on, camera_prob, camera_hold_s "
+        "FROM settings WHERE device_id = %s",
+        (device_id,),
+    ).fetchone()
+
+
+@router.get("/api/settings")
+def read_settings(
+    device_id: str = Depends(require_app_device),
+):
+    """페어링된 기기의 Cloud 설정 조회."""
+
+    with get_connection() as conn:
+        _ensure_settings_row(conn, device_id)
+        row = _load_settings_row(conn, device_id)
+
+    return _settings_view(row)
+
+
+@router.put("/api/settings")
+def write_settings(
+    changes: dict[str, Any],
+    device_id: str = Depends(require_app_device),
+):
+    """전송한 설정만 변경하고 전체 설정 반환."""
+
+    updates = {}
+
+    for key, value in changes.items():
+
+        if key in ("region", "device_keep_days"):
+            continue
+
+        if key == "notify":
+            if not isinstance(value, list) or any(
+                not isinstance(item, str)
+                or item not in ABNORMAL_SETTINGS
+                for item in value
+            ):
+                raise ApiError(
+                    400, "bad_notify",
+                    "notify는 이상 상황 3가지 중에서 선택해야 합니다."
+                )
+            updates[key] = Jsonb(value)
+
+        elif key == "camera_on":
+            if not isinstance(value, bool):
+                raise ApiError(
+                    400, "bad_camera_on",
+                    "camera_on은 true 또는 false여야 합니다."
+                )
+            updates[key] = value
+
+        elif key in ("camera_prob", "camera_hold_s"):
+            if isinstance(value, bool) or not isinstance(
+                value, (int, float)
+            ):
+                raise ApiError(
+                    400, f"bad_{key}",
+                    f"{key}는 숫자여야 합니다."
+                )
+
+            upper = 1 if key == "camera_prob" else 10
+
+            if not math.isfinite(value) or not 0 <= value <= upper:
+                raise ApiError(
+                    400, f"bad_{key}",
+                    f"{key}는 0~{upper} 범위여야 합니다."
+                )
+
+            updates[key] = float(value)
+
+        else:
+            raise ApiError(
+                400, "unknown_setting",
+                f"모르는 설정입니다: {key}"
+            )
+
+    with get_connection() as conn:
+        _ensure_settings_row(conn, device_id)
+
+        if updates:
+            assignments = ", ".join(
+                f"{key} = %s" for key in updates
+            )
+
+            conn.execute(
+                f"UPDATE settings SET {assignments}, "
+                "updated_at = NOW() "
+                "WHERE device_id = %s",
+                [*updates.values(), device_id],
+            )
+
+        row = _load_settings_row(conn, device_id)
+
+    return _settings_view(row)
