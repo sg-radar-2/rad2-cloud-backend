@@ -3,12 +3,12 @@ import secrets
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
+from services.push_dispatcher import dispatch_camera_push
 
 from db.connection import get_connection
-
 
 router = APIRouter()
 
@@ -32,6 +32,7 @@ class DeviceEvent(BaseModel):
 @router.post("/api/device/events")
 def receive_event(
     event: DeviceEvent,
+    background_tasks: BackgroundTasks,
     x_device_key: str | None = Header(default=None),
 ):
     # 1. Raspberry Pi 인증
@@ -111,6 +112,13 @@ def receive_event(
 
         cloud_event_id = row[0]
 
+        # camera Event만 FCM 발송 대상으로 처리
+    if event.kind == "camera":
+        background_tasks.add_task(
+            dispatch_camera_push,
+            cloud_event_id,
+        )
+        
     # 4. 저장 성공 응답
     return {
         "ok": True,

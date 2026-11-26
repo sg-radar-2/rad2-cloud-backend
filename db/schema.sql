@@ -143,3 +143,16 @@ ON photo_acks(event_id);
 
 CREATE INDEX IF NOT EXISTS idx_push_tokens_app
 ON push_tokens(app_token_id);
+
+-- M6: Event별 휴대폰 Push 발송 기록
+CREATE TABLE IF NOT EXISTS push_deliveries (
+    event_id BIGINT NOT NULL
+        REFERENCES events(id) ON DELETE CASCADE,
+
+    app_token_id BIGINT NOT NULL
+        REFERENCES app_tokens(id) ON DELETE CASCADE,
+
+    sent_at TIMESTAMPTZ,
+
+    PRIMARY KEY (event_id, app_token_id)
+);
