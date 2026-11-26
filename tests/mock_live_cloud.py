@@ -88,8 +88,26 @@ async def main():
             await until(phone1, lambda m: m.get("radar") == "stale" and m.get("people") == [], timeout=8)
             print("[OK] stale state after frames stop")
 
-        await until(phone1, lambda m: m.get("radar") == "disconnected", timeout=8)
-        print("[OK] Pi disconnected state relayed")
+        
+        print("[TEST] Mock Pi socket closed")
+
+        try:
+            await until(
+                phone1,
+                lambda m: m.get("radar") == "disconnected",
+                timeout=15,
+            )
+            print("[OK] Pi disconnected state relayed")
+        except TimeoutError:
+            print("[FAIL] No disconnected frame received")
+
+            status = await asyncio.to_thread(
+                status_from_http, app_token
+            )
+            print("[DEBUG] Cloud status radar:", status.get("radar"))
+            print("[DEBUG] Status source:", status.get("status_source"))
+            raise
+
 
     # Security smoke: unauthorized connection should be rejected.
     try:
